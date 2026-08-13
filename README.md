@@ -1,8 +1,8 @@
 # OpenID Connect for Laravel Socialite
 
-Connect Laravel Socialite to any OpenID Connect identity provider — Keycloak, Entra ID, Auth0, Okta, Google, Authentik, or anything else that serves a discovery document. Run **as many issuers side by side as you need**, each as its own Socialite driver.
+A generic OpenID Connect driver for Laravel Socialite. Point it at any issuer that serves a discovery document: Keycloak, Entra ID, Auth0, Okta, Google, Authentik, or anything else that speaks OIDC. You can configure several issuers at once, and each becomes its own Socialite driver.
 
-Endpoints are auto-discovered, keys are fetched and rotated automatically, and every token is fully validated (signature, `iss`, `aud`, `azp`, `exp`, `nonce`, `at_hash`) with PKCE on by default.
+Endpoints come from the issuer's discovery document. Signing keys come from its JWKS and refresh automatically when the issuer rotates them. Every id_token is validated properly (signature, `iss`, `aud`, `azp`, `exp`, `nonce`, `at_hash`) and PKCE is on by default.
 
 ```bash
 composer require socialiteproviders/openid-connect
@@ -51,7 +51,7 @@ return [
 ];
 ```
 
-Each connection becomes a Socialite driver named `oidc_{connection}`, fully isolated from the others — its own credentials, endpoints and caches.
+Each connection becomes a Socialite driver named `oidc_{connection}`. Connections share nothing: each has its own credentials, endpoints and caches.
 
 ## Use
 
@@ -64,7 +64,7 @@ return Socialite::driver('oidc_keycloak')->redirect();
 // In your callback controller:
 $user = Socialite::driver('oidc_keycloak')->user();
 
-$user->getId();       // sub — the one claim every IdP must return
+$user->getId();       // sub, the one claim every IdP must return
 $user->getEmail();    // null when the IdP didn't grant an email
 $user->getName();
 $user->getRaw();      // every claim from the id_token (merged with userinfo)
@@ -76,7 +76,7 @@ $user->getRaw();      // every claim from the id_token (merged with userinfo)
 ```php
 $user->getId();                              // sub
 $user->getRaw();                             // all claims
-$user->accessTokenResponseBody['id_token'];  // the raw id_token — stash it for logout
+$user->accessTokenResponseBody['id_token'];  // the raw id_token, stash it for logout
 $user->approvedScopes;                       // scopes the IdP actually granted
 $user->token;                                // access token
 $user->refreshToken;                         // refresh token, if granted
@@ -84,27 +84,27 @@ $user->refreshToken;                         // refresh token, if granted
 
 Mapped fields: `id` (`sub`), `email`, `name`, `nickname`, `given_name`, `family_name`, `idp`, `role`, `groups`.
 
-`email` is not guaranteed — it depends on the `email` scope being granted — so a user without one gets a null email rather than a failed login. Set `require_email` if your application cannot proceed without it. When the id_token lacks an email, the userinfo endpoint is consulted automatically and its claims merged in.
+`email` isn't guaranteed. It depends on the `email` scope being granted, so a user without one gets a null email rather than a failed login. Set `require_email` if your application can't proceed without it. When the id_token has no email, the userinfo endpoint is consulted automatically and its claims merged in.
 
-Access and refresh tokens are bearer credentials: if you persist them, encrypt them at rest (Laravel's `encrypted` cast) and keep them out of JavaScript-readable storage.
+Access and refresh tokens are bearer credentials. If you persist them, encrypt them at rest (Laravel's `encrypted` cast) and keep them out of JavaScript-readable storage.
 
 </details>
 
-For everything after the login — RP-initiated logout with state validation, RFC 7009 token revocation, back-channel logout, refreshing tokens, and storing tokens safely — see [docs/logout.md](docs/logout.md).
+For what comes after login (RP-initiated logout with state validation, RFC 7009 token revocation, back-channel logout, refreshing tokens, storing tokens safely) see [docs/logout.md](docs/logout.md).
 
 ## Built-in providers
 
-The `provider` key picks the class that drives a connection. Built-ins know their IdP's shape, so you configure the natural thing (`tenant`, `realm`, `domain`) instead of hand-building URLs — and anything you set explicitly always wins:
+The `provider` key picks the class that drives a connection. The built-in classes know the URL shape for their IdP, so you set `tenant` or `realm` or `domain` instead of building the base URL yourself. Anything you set explicitly wins over what the class derives:
 
 | `provider` | Reads | Derives |
 |---|---|---|
-| `entra` | `tenant` (default `common`) | `base_url`, plus multi-tenant issuer handling — [details](docs/extending.md#the-entra-issuer-template) |
+| `entra` | `tenant` (default `common`) | `base_url`, plus multi-tenant issuer handling ([details](docs/extending.md#the-entra-issuer-template)) |
 | `keycloak` | `server_url`, `realm` | `base_url` = `{server_url}/realms/{realm}` |
 | `auth0` | `domain` | `base_url`, `client_secret_post` token auth |
 | `okta` | `domain`, `auth_server` | `base_url`, `/oauth2/{auth_server}` when named |
-| `google` | — | `base_url` = `https://accounts.google.com` |
+| `google` | none | `base_url` = `https://accounts.google.com` |
 
-Omit `provider` for any standards-compliant issuer and set `base_url` directly. To encode your own IdP's shape, [write a provider class](docs/extending.md) and put its name in `provider` — [docs/extending.md](docs/extending.md) covers the `configDefaults()` hook, the overrides worth knowing, and pluggable issuer validation (including [how Entra multi-tenant is handled](docs/extending.md#the-entra-issuer-template)).
+For any other issuer, omit `provider` and set `base_url` directly. To encode your own IdP's shape, write a provider class and put its class name in `provider`. [docs/extending.md](docs/extending.md) covers the `configDefaults()` hook, the commonly overridden methods, and issuer validation (including [how Entra multi-tenant is handled](docs/extending.md#the-entra-issuer-template)).
 
 ## Configuration reference
 
@@ -115,18 +115,18 @@ Required: `client_id`, `client_secret`, `redirect`, and `base_url` (unless a bui
 
 | Key | Default | Meaning |
 |---|---|---|
-| `base_url` | — | Issuer URL; discovery is `{base_url}/.well-known/openid-configuration`. https required (loopback hosts exempt, so local dev works). |
+| `base_url` | none | Issuer URL; discovery is `{base_url}/.well-known/openid-configuration`. https required (loopback hosts exempt, so local dev works). |
 | `provider` | `Provider::class` | Built-in shorthand or a Provider subclass name. |
 | `scopes` | `openid email profile` | Replaces the defaults. Array, or string separated by whitespace/commas. `openid` is always sent. |
-| `verify_jwt` | `true` | Verify id_token signatures. Only disable for an OP that cannot serve a JWKS; back-channel logout tokens are **always** verified regardless. |
-| `jwt_public_key` | — | PEM public key used instead of fetching the JWKS. |
+| `verify_jwt` | `true` | Verify id_token signatures. Only disable for an OP that can't serve a JWKS; back-channel logout tokens are always verified regardless. |
+| `jwt_public_key` | none | PEM public key used instead of fetching the JWKS. |
 | `jwt_algorithm` | advertised algs, else `RS256` | Pin the accepted signing algorithm(s), e.g. `RS256` or `RS256,ES256`. |
 | `issuer` | discovery `issuer` | Override the expected `iss` claim. |
-| `issuer_validator` | strict equality | [`IssuerValidator`](docs/extending.md#issuer-validators) class, for issuer shapes an exact comparison cannot express. |
+| `issuer_validator` | strict equality | [`IssuerValidator`](docs/extending.md#issuer-validators) class, for issuers an exact comparison can't handle. |
 | `token_auth_method` | advertised, preferring basic | `client_secret_basic` or `client_secret_post`. |
 | `use_nonce` | `true` | Send and validate a nonce. Ignored (always off) in stateless mode. |
 | `require_email` | `false` | Fail the login when no email can be obtained. |
-| `post_logout_redirect_uri` | — | Default for the [`logout()`](docs/logout.md) helper. |
+| `post_logout_redirect_uri` | none | Default for the [`logout()`](docs/logout.md) helper. |
 | `logout_token_replay_ttl` | token `exp` + skew | Seconds a back-channel logout `jti` is remembered. `0` disables built-in replay protection. |
 | `cache_ttl` | `3600` | TTL for the cached discovery document and JWKS. |
 | `clock_skew` | `0` | Leeway in seconds applied to `exp`/`nbf`/`iat`. |
@@ -139,7 +139,7 @@ The `driver_prefix` config key (default `oidc_`) controls the driver names.
 <details>
 <summary>Single issuer without a config file</summary>
 
-A plain `services.php` entry registers an `openidconnect` driver with no `config/oidc.php` at all — the same keys apply, including `provider`:
+A plain `services.php` entry registers an `openidconnect` driver with no `config/oidc.php` at all. The same keys apply, including `provider`:
 
 ```php
 'openidconnect' => [
@@ -154,14 +154,14 @@ A plain `services.php` entry registers an `openidconnect` driver with no `config
 
 ## Security
 
-Every login validates the state (CSRF), the id_token signature against the discovered JWKS (refetched automatically on key rotation), the signing algorithm against an allow-list, `iss`, `aud`/`azp`, `exp`/`nbf`/`iat`, the `nonce` (cleared after use, so replays fail), `at_hash` against the access token, and `sub`. PKCE is on by default. The full mechanics are in [docs/security.md](docs/security.md).
+Every login validates the state (CSRF), the id_token signature against the discovered JWKS (refetched when keys rotate), the signing algorithm against an allow list, `iss`, `aud`/`azp`, `exp`/`nbf`/`iat`, the `nonce` (cleared after use, so replays fail), `at_hash` against the access token, and `sub`. PKCE is on by default. [docs/security.md](docs/security.md) has the full detail.
 
 <details>
 <summary>Stateless mode and PKCE</summary>
 
 The nonce and the PKCE verifier both live in the session between the redirect and the callback:
 
-- `->stateless()` skips the nonce automatically — safe for the code flow, where the code is bound to the client by PKCE and exchanged over the back channel. PKCE still works as long as a session store is bound to the request.
+- `->stateless()` skips the nonce automatically. That's safe for the code flow, where the code is bound to the client by PKCE and exchanged over the back channel. PKCE still works as long as a session store is bound to the request.
 - With genuinely no session, add `->withoutPKCE()`:
 
 ```php
@@ -178,7 +178,7 @@ Socialite::driver('oidc_keycloak')->stateless()->withoutPKCE()->redirect();
 composer test
 ```
 
-The suite covers discovery and caching, JWKS key rotation, `alg: none` and key-confusion rejection, every claim check, nonce replay, issuer pluggability, userinfo merging, token endpoint auth methods, all logout flows, the built-in provider classes, and multi-connection isolation.
+The suite covers discovery and caching, JWKS key rotation, algorithm and claim validation, nonce replay, userinfo merging, token endpoint auth methods, the logout flows, the built-in provider classes, and multi-connection isolation.
 
 ## Credits
 
