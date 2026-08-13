@@ -104,3 +104,9 @@ https://login.microsoftonline.com/{tenantid}/v2.0
 ```
 
 A strict comparison can never match that. `EntraProvider` defaults `issuer_validator` to `EntraIssuerValidator`, which substitutes the token's `tid` claim into the placeholder before comparing exactly, so `'provider' => 'entra'` needs no issuer configuration at all. Single-tenant setups have no placeholder and are compared strictly, unchanged.
+
+### Entra and email
+
+Entra's `email` claim is the directory contact email, often empty and settable to any address by any tenant admin with no domain verification. Treating it as an account identifier in a multi-tenant app is the [nOAuth account takeover](https://www.descope.com/blog/post/noauth). The login identity lives in `preferred_username` instead, so `EntraProvider` resolves the user's email from `preferred_username` first, falling back to `email`, and skips values that aren't email-shaped (`preferred_username` can be a phone number). Override with the `email_claims` config key if you want different behaviour.
+
+Whatever claim it comes from, treat the email as display data. Key accounts on `$user->getId()` (the `sub` claim), which is immutable and can't be spoofed across tenants. If you must link accounts by email, request Microsoft's `xms_edov` optional claim and only trust the email when it says the domain owner is verified. Querying Microsoft Graph doesn't help: it returns the same directory attributes, controlled by the same tenant admin.

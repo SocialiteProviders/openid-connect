@@ -203,14 +203,15 @@ trait InteractsWithOidc
     /**
      * @param  array  $config  additional provider config, merged over base_url
      * @param  array  $responses  Guzzle MockHandler queue
+     * @param  class-string<Provider>  $providerClass
      */
-    protected function makeProvider(array $config = [], array $responses = [], ?Request $request = null): Provider
+    protected function makeProvider(array $config = [], array $responses = [], ?Request $request = null, string $providerClass = Provider::class): Provider
     {
         $request ??= $this->callbackRequest();
 
         $config = array_merge(['base_url' => static::$opBaseUrl], $config);
 
-        $provider = new Provider(
+        $provider = new $providerClass(
             $request,
             static::$opClientId,
             static::$opClientSecret,

@@ -85,6 +85,16 @@ class ProviderFlavorsTest extends TestCase
         $this->assertSame('App\\Custom', $this->configOf($pinned, 'issuer_validator'));
     }
 
+    public function test_entra_defaults_to_preferred_username_for_email(): void
+    {
+        $provider = $this->flavor(EntraProvider::class, []);
+
+        $this->assertSame(['preferred_username', 'email'], $this->configOf($provider, 'email_claims'));
+
+        $pinned = $this->flavor(EntraProvider::class, ['email_claims' => ['email']]);
+        $this->assertSame(['email'], $this->configOf($pinned, 'email_claims'));
+    }
+
     public function test_keycloak_derives_the_base_url_from_server_and_realm(): void
     {
         $provider = $this->flavor(KeycloakProvider::class, [

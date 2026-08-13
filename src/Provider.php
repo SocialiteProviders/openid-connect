@@ -56,6 +56,7 @@ class Provider extends AbstractProvider
             'use_nonce',
             'require_email',
             'verify_jwt',
+            'email_claims',
             'jwt_public_key',
             'jwt_algorithm',
             'issuer',
@@ -144,7 +145,7 @@ class Provider extends AbstractProvider
 
     public function getScopes(): array
     {
-        $configured = $this->parseScopeList($this->getConfig('scopes'));
+        $configured = $this->parseList($this->getConfig('scopes'));
 
         // Configured scopes replace the defaults (so an OP without `profile`
         // can be narrowed down) but keep anything added via fluent scopes().
@@ -159,21 +160,24 @@ class Provider extends AbstractProvider
     }
 
     /**
+     * Normalise a list given as an array, or a string separated by
+     * whitespace and/or commas.
+     *
      * @return string[]
      */
-    protected function parseScopeList(mixed $scopes): array
+    protected function parseList(mixed $values): array
     {
-        if ($scopes === null || $scopes === '' || $scopes === []) {
+        if ($values === null || $values === '' || $values === []) {
             return [];
         }
 
-        $list = is_array($scopes)
-            ? $scopes
-            : preg_split('/[\s,]+/', (string) $scopes, -1, PREG_SPLIT_NO_EMPTY);
+        $list = is_array($values)
+            ? $values
+            : preg_split('/[\s,]+/', (string) $values, -1, PREG_SPLIT_NO_EMPTY);
 
         return array_values(array_filter(
-            array_map(static fn ($scope) => is_string($scope) ? trim($scope) : null, $list ?: []),
-            static fn (?string $scope) => $scope !== null && $scope !== ''
+            array_map(static fn ($value) => is_string($value) ? trim($value) : null, $list ?: []),
+            static fn (?string $value) => $value !== null && $value !== ''
         ));
     }
 
@@ -814,20 +818,57 @@ class Provider extends AbstractProvider
             : filter_var($configured, FILTER_VALIDATE_BOOLEAN);
     }
 
-    protected function hasEmptyEmail($payload): bool
+    /**
+     * The claims consulted for the user's email, in order. Configurable
+     * because not every IdP puts the login email in `email` -- Entra returns
+     * the contact-info email there (often empty or unrelated) and the login
+     * identity in `preferred_username`.
+     *
+     * @return string[]
+     */
+    protected function emailClaims(): array
     {
-        if (is_array($payload)) {
-            return empty($payload['email'] ?? null);
+        $configured = $this->parseList($this->getConfig('email_claims'));
+
+        return $configured === [] ? ['email'] : $configured;
+    }
+
+    protected function resolveEmail(array|stdClass $claims): ?string
+    {
+        $claims = (array) $claims;
+
+        foreach ($this->emailClaims() as $claim) {
+            $value = $claims[$claim] ?? null;
+
+            if (is_string($value) && $value !== '' && $this->acceptableEmail($value)) {
+                return $value;
+            }
         }
 
-        return empty($payload->email ?? null);
+        return null;
+    }
+
+    /**
+     * Whether a candidate claim value may be used as the email. The base
+     * accepts anything, since a configured claim list is the operator's
+     * explicit choice; subclasses tighten this where a claim has no fixed
+     * format (Entra's preferred_username can be a phone number).
+     */
+    protected function acceptableEmail(string $value): bool
+    {
+        return true;
+    }
+
+    protected function hasEmptyEmail(array|stdClass $payload): bool
+    {
+        return $this->resolveEmail($payload) === null;
     }
 
     protected function mapUserToObject(array $user)
     {
         return (new User)->setRaw($user)->map([
             'id'          => $user['sub'] ?? null,
-            'email'       => $user['email'] ?? null,
+            'email'       => $this->resolveEmail($user),
             'name'        => $user['name'] ?? null,
             'nickname'    => $user['nickname'] ?? null,
             'given_name'  => $user['given_name'] ?? null,
