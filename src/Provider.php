@@ -906,7 +906,11 @@ class Provider extends AbstractProvider
 
         $response = $this->getHttpClient()->post($this->getTokenUrl(), $this->tokenRequestOptions($fields));
 
-        return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        try {
+            return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (Exception $e) {
+            throw new InvalidArgumentException('Token endpoint returned a non-JSON response: '.$e->getMessage());
+        }
     }
 
     protected function tokenRequestOptions(array $fields): array
