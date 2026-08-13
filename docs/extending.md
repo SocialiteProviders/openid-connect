@@ -1,0 +1,106 @@
+# Extending
+
+Two seams cover everything: a **provider class** per connection for config derivation and behaviour, and an **issuer validator** for the one check whose shape varies between IdPs.
+
+## Custom provider classes
+
+The `provider` key in a connection names the class that drives it. Built-in shorthands (`entra`, `keycloak`, `auth0`, `okta`, `google`) map to subclasses shipped with the package; any class extending `SocialiteProviders\OpenIDConnect\Provider` works the same way. Nothing registers anywhere — Socialite instantiates the class when the driver is first resolved.
+
+A subclass typically overrides two things:
+
+- `configDefaults(array $config): array` — defaults derived from the connection's own values, merged *under* whatever the user set explicitly. This is where `base_url` gets built from a friendlier key, or a quirk gets pinned.
+- `additionalConfigKeys(): array` — any extra keys the class reads, so the manager's config retriever passes them through.
+
+```php
+use SocialiteProviders\OpenIDConnect\Provider;
+
+class MyCorpProvider extends Provider
+{
+    public static function additionalConfigKeys(): array
+    {
+        return array_merge(parent::additionalConfigKeys(), ['tenant']);
+    }
+
+    protected function configDefaults(array $config): array
+    {
+        return [
+            'base_url'   => 'https://sso.mycorp.example/tenants/'.($config['tenant'] ?? 'default'),
+            'scopes'     => ['email', 'mycorp:roles'],
+            'clock_skew' => 30,
+        ];
+    }
+}
+```
+
+```php
+// config/oidc.php
+'connections' => [
+    'mycorp' => [
+        'provider'      => MyCorpProvider::class,
+        'tenant'        => 'acme',
+        'client_id'     => env('MYCORP_CLIENT_ID'),
+        'client_secret' => env('MYCORP_CLIENT_SECRET'),
+        'redirect'      => env('MYCORP_REDIRECT_URI'),
+    ],
+],
+```
+
+For deeper changes, any method is an override away. The ones most worth knowing:
+
+| Override | To change |
+|---|---|
+| `mapUserToObject(array $user)` | Which claims land on the Socialite user |
+| `getScopes()` / `$scopes` | Scope handling |
+| `getBaseUrl()` | How the issuer URL is resolved or constrained |
+| `resolveTokenAuthMethod()` | Client authentication at the token endpoint |
+| `validateIdTokenClaims($payload, $alg, $accessToken)` | Claim validation (call `parent::` and add, rather than replace) |
+| `getHttpClient()` | HTTP behaviour (proxies, middleware, mTLS) |
+
+The built-in provider classes in [`src/Providers/`](../src/Providers) are the reference examples — each is a few lines.
+
+## Issuer validators
+
+The `iss` claim is checked on every id_token and every back-channel logout token. The expected value is the `issuer` config, falling back to the discovery document's, and the default comparison is **strict equality** — nothing more.
+
+Some IdPs don't emit their issuer verbatim, so the comparison itself is pluggable. A validator implements one method and sees the full token payload, so other claims can inform the decision:
+
+```php
+use SocialiteProviders\OpenIDConnect\IssuerValidators\IssuerValidator;
+use stdClass;
+
+class MyIssuerValidator implements IssuerValidator
+{
+    public function validate(string $expectedIssuer, stdClass $payload): bool
+    {
+        return str_starts_with($payload->iss ?? '', 'https://sso.mycorp.example/');
+    }
+}
+```
+
+Wire it in at whichever level fits:
+
+```php
+// Per connection — resolved through the container:
+'issuer_validator' => MyIssuerValidator::class,
+
+// Per request, fluently — a class instance or a closure:
+Socialite::driver('oidc_mycorp')
+    ->validateIssuerUsing(fn (string $expected, stdClass $payload) => /* bool */)
+    ->user();
+
+// Per provider class — as a derived default, the way EntraProvider does:
+protected function configDefaults(array $config): array
+{
+    return ['issuer_validator' => MyIssuerValidator::class];
+}
+```
+
+### The Entra issuer template
+
+Entra ID advertises the issuer for multi-tenant apps as a literal template, placeholder unsubstituted:
+
+```
+https://login.microsoftonline.com/{tenantid}/v2.0
+```
+
+A strict comparison can never match that, so `EntraProvider` defaults `issuer_validator` to `EntraIssuerValidator`, which substitutes the token's `tid` claim into the placeholder before comparing exactly. Using `'provider' => 'entra'` therefore needs no issuer configuration at all; single-tenant setups (no placeholder) are compared strictly, unchanged.

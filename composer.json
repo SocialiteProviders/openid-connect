@@ -1,0 +1,67 @@
+{
+    "name": "socialiteproviders/openid-connect",
+    "description": "Generic OpenID Connect provider for Laravel Socialite: multiple configured issuers, auto-discovery, JWKS rotation, at_hash and nonce validation",
+    "license": "MIT",
+    "keywords": [
+        "openid",
+        "openid-connect",
+        "oidc",
+        "laravel",
+        "oauth",
+        "provider",
+        "socialite",
+        "keycloak",
+        "authentik",
+        "entra"
+    ],
+    "authors": [
+        {
+            "name": "SocialiteProviders",
+            "homepage": "https://socialiteproviders.com"
+        },
+        {
+            "name": "adrum"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/socialiteproviders/openid-connect/issues",
+        "source": "https://github.com/socialiteproviders/openid-connect"
+    },
+    "require": {
+        "php": "^8.1",
+        "ext-json": "*",
+        "ext-openssl": "*",
+        "socialiteproviders/manager": "^4.4",
+        "illuminate/http": "^9.0 | ^10.0 | ^11.0 | ^12.0 | ^13.0",
+        "illuminate/support": "^9.0 | ^10.0 | ^11.0 | ^12.0 | ^13.0",
+        "firebase/php-jwt": "^7.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0 | ^9.0 | ^10.0",
+        "phpunit/phpunit": "^10.5 | ^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SocialiteProviders\\OpenIDConnect\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SocialiteProviders\\OpenIDConnect\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SocialiteProviders\\OpenIDConnect\\OpenIDConnectServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}

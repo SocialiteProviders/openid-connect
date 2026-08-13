@@ -1,0 +1,103 @@
+<?php
+
+namespace SocialiteProviders\OpenIDConnect\Tests\Unit;
+
+use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
+use SocialiteProviders\OpenIDConnect\Tests\Support\InteractsWithOidc;
+use SocialiteProviders\OpenIDConnect\Tests\TestCase;
+
+class JwksTest extends TestCase
+{
+    use InteractsWithOidc;
+
+    public function test_the_jwks_is_cached_across_logins(): void
+    {
+        $provider = $this->makeProvider([], $this->happyPathResponses());
+        $provider->user();
+
+        $request = $this->callbackRequest();
+        $second = $this->makeProvider([], [
+            $this->tokenEndpointResponse($this->encodeToken($this->idTokenClaims())),
+        ], $request);
+
+        $this->assertSame('user-123', $second->user()->getId());
+        $this->assertSame(['POST /token'], $this->requestedPaths());
+    }
+
+    public function test_an_unknown_kid_triggers_a_jwks_refetch_so_key_rotation_works(): void
+    {
+        // The cached JWKS only knows kid-1; the OP has rotated to kid-2.
+        $rotated = $this->encodeToken($this->idTokenClaims(), kid: 'kid-2', slot: 2);
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($rotated),
+            $this->jsonResponse($this->jwksDocument([$this->jwk('kid-1', 1)])),
+            $this->jsonResponse($this->jwksDocument([
+                $this->jwk('kid-1', 1),
+                $this->jwk('kid-2', 2),
+            ])),
+        ]);
+
+        $this->assertSame('user-123', $provider->user()->getId());
+
+        $this->assertSame(2, count(array_filter(
+            $this->requestedPaths(),
+            static fn (string $path) => $path === 'GET /jwks',
+        )));
+    }
+
+    public function test_a_known_kid_does_not_refetch_the_jwks(): void
+    {
+        $provider = $this->makeProvider([], $this->happyPathResponses());
+
+        $provider->user();
+
+        $this->assertSame(1, count(array_filter(
+            $this->requestedPaths(),
+            static fn (string $path) => $path === 'GET /jwks',
+        )));
+    }
+
+    public function test_a_kid_still_missing_after_the_refetch_fails(): void
+    {
+        $rotated = $this->encodeToken($this->idTokenClaims(), kid: 'kid-99', slot: 2);
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($rotated),
+            $this->jsonResponse($this->jwksDocument([$this->jwk('kid-1', 1)])),
+            $this->jsonResponse($this->jwksDocument([$this->jwk('kid-1', 1)])),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Verification failed');
+
+        $provider->user();
+    }
+
+    public function test_missing_jwks_uri_in_discovery_is_reported(): void
+    {
+        $doc = $this->discoveryDocument();
+        unset($doc['jwks_uri']);
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($doc),
+            $this->tokenEndpointResponse($this->encodeToken($this->idTokenClaims())),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('JWKS URI not found');
+
+        $provider->user();
+    }
+
+    public function test_jwks_cache_key_is_scoped_to_the_issuer(): void
+    {
+        $provider = $this->makeProvider([], $this->happyPathResponses());
+        $provider->user();
+
+        $this->assertTrue(Cache::has('openidconnect_jwks_'.md5(static::$opBaseUrl)));
+    }
+}
