@@ -68,6 +68,7 @@ class Provider extends AbstractProvider
             'clock_skew',
             'http_timeout',
             'http_connect_timeout',
+            'proxy',
         ];
     }
 
@@ -289,10 +290,16 @@ class Provider extends AbstractProvider
     protected function getHttpClient()
     {
         if ($this->httpClient === null) {
-            $this->httpClient = new Client([
+            $options = [
                 'connect_timeout' => (float) ($this->getConfig('http_connect_timeout') ?: 5),
                 'timeout'         => (float) ($this->getConfig('http_timeout') ?: 10),
-            ]);
+            ];
+
+            if ($proxy = $this->getConfig('proxy')) {
+                $options[RequestOptions::PROXY] = $proxy;
+            }
+
+            $this->httpClient = new Client($options);
         }
 
         return $this->httpClient;
@@ -356,17 +363,29 @@ class Provider extends AbstractProvider
         return $this->configurations;
     }
 
-    protected function getJwks(): array
+    protected function getJwks(bool $forceRefresh = false): array
     {
-        return Cache::remember($this->jwksCacheKey(), $this->getCacheTtl(), function () {
+        if ($forceRefresh) {
+            Cache::forget($this->jwksCacheKey());
+        }
+
+        return Cache::remember($this->jwksCacheKey(), $this->getCacheTtl(), function () use ($forceRefresh) {
             $config = $this->getOpenIdConfig();
 
             if (! isset($config['jwks_uri'])) {
                 throw new InvalidArgumentException('JWKS URI not found in OIDC configuration');
             }
 
+            // Bust any HTTP cache between us and the OP, not just our own.
+            $options = $forceRefresh ? [
+                RequestOptions::HEADERS => [
+                    'Cache-Control' => 'no-cache',
+                    'Pragma'        => 'no-cache',
+                ],
+            ] : [];
+
             try {
-                $response = $this->getHttpClient()->get($config['jwks_uri']);
+                $response = $this->getHttpClient()->get($config['jwks_uri'], $options);
 
                 return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
             } catch (Exception $e) {
@@ -514,8 +533,7 @@ class Provider extends AbstractProvider
 
                 // Unknown kid: the OP has likely rotated keys since we cached.
                 if ($kid && ! $this->jwksContainsKid($jwks, $kid)) {
-                    Cache::forget($this->jwksCacheKey());
-                    $jwks = $this->getJwks();
+                    $jwks = $this->getJwks(forceRefresh: true);
                 }
 
                 $decoded = JWT::decode($jwt, JWK::parseKeySet($jwks, $alg));

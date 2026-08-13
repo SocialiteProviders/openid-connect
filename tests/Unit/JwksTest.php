@@ -48,6 +48,28 @@ class JwksTest extends TestCase
         )));
     }
 
+    public function test_the_rotation_refetch_sends_no_cache_headers(): void
+    {
+        $rotated = $this->encodeToken($this->idTokenClaims(), kid: 'kid-2', slot: 2);
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($rotated),
+            $this->jsonResponse($this->jwksDocument([$this->jwk('kid-1', 1)])),
+            $this->jsonResponse($this->jwksDocument([$this->jwk('kid-2', 2)])),
+        ]);
+        $provider->user();
+
+        [$first, $second] = array_values(array_filter(
+            $this->httpHistory,
+            static fn (array $entry) => $entry['request']->getUri()->getPath() === '/jwks',
+        ));
+
+        $this->assertFalse($first['request']->hasHeader('Cache-Control'));
+        $this->assertSame('no-cache', $second['request']->getHeaderLine('Cache-Control'));
+        $this->assertSame('no-cache', $second['request']->getHeaderLine('Pragma'));
+    }
+
     public function test_a_known_kid_does_not_refetch_the_jwks(): void
     {
         $provider = $this->makeProvider([], $this->happyPathResponses());

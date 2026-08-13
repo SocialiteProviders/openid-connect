@@ -54,7 +54,7 @@ For deeper changes, override the relevant method. The common ones:
 | `getBaseUrl()` | How the issuer URL is resolved or constrained |
 | `resolveTokenAuthMethod()` | Client authentication at the token endpoint |
 | `validateIdTokenClaims($payload, $alg, $accessToken)` | Claim validation (call `parent::` and add, rather than replace) |
-| `getHttpClient()` | HTTP behaviour (proxies, middleware, mTLS) |
+| `getHttpClient()` | HTTP behaviour (middleware, mTLS; a plain proxy is the `proxy` config key) |
 
 The built-in provider classes in [`src/Providers/`](../src/Providers) are the reference examples. Each is a few lines.
 

@@ -132,6 +132,7 @@ Required: `client_id`, `client_secret`, `redirect`, and `base_url` (unless a bui
 | `cache_ttl` | `3600` | TTL for the cached discovery document and JWKS. |
 | `clock_skew` | `0` | Leeway in seconds applied to `exp`/`nbf`/`iat`. |
 | `http_timeout` / `http_connect_timeout` | `10` / `5` | Guzzle timeouts for IdP calls. |
+| `proxy` | none | Proxy for IdP calls, in [Guzzle's format](https://docs.guzzlephp.org/en/stable/request-options.html#proxy) (a URL string, or an array per scheme). |
 
 The `driver_prefix` config key (default `oidc_`) controls the driver names.
 

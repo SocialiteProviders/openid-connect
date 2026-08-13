@@ -32,6 +32,7 @@ return [
     | jwt_public_key  PEM alternative to the discovered JWKS.
     | jwt_algorithm   Pin the accepted signing algorithm(s).
     | issuer          Override the expected `iss` claim.
+    | proxy           Proxy for calls to the IdP, in Guzzle's format.
     | issuer_validator  Class implementing IssuerValidator, for issuer shapes
     |                 the default strict comparison cannot express (built-in
     |                 providers set this where their IdP needs it).
