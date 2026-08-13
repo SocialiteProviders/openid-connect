@@ -125,4 +125,20 @@ class RedirectFlowTest extends TestCase
         $this->assertSame('prod', $query['realm']);
         $this->assertSame('code', $query['response_type']);
     }
+
+    public function test_the_code_challenge_is_derived_from_the_stored_verifier(): void
+    {
+        $request = $this->redirectRequest();
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+        ], $request);
+
+        $query = $this->queryOf($provider->redirect()->getTargetUrl());
+        $verifier = $request->session()->get('code_verifier');
+
+        $this->assertSame(
+            static::base64Url(hash('sha256', $verifier, true)),
+            $query['code_challenge'],
+        );
+    }
 }

@@ -246,4 +246,78 @@ class IdTokenVerificationTest extends TestCase
 
         $provider->user();
     }
+
+    public function test_a_four_segment_token_is_rejected(): void
+    {
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($this->unsignedToken($this->idTokenClaims()).'.extra'),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('expected three segments');
+
+        $provider->user();
+    }
+
+    public function test_a_header_that_is_not_a_json_object_is_rejected(): void
+    {
+        $token = static::base64Url('[1,2]').'.'.static::base64Url('{}').'.sig';
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($token),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Failed to parse header');
+
+        $provider->user();
+    }
+
+    public function test_an_out_of_alphabet_payload_is_rejected(): void
+    {
+        $token = static::base64Url(json_encode(['alg' => 'RS256'])).'.!!!.sig';
+
+        $provider = $this->makeProvider(['verify_jwt' => false], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($token),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Malformed base64url segment');
+
+        $provider->user();
+    }
+
+    public function test_verify_jwt_as_a_falsy_string_also_opts_out(): void
+    {
+        // env('OIDC_VERIFY_JWT') style values arrive as strings.
+        $provider = $this->makeProvider(['verify_jwt' => 'false'], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($this->unsignedToken($this->idTokenClaims())),
+        ]);
+
+        $this->assertSame('user-123', $provider->user()->getId());
+        $this->assertNotContains('GET /jwks', $this->requestedPaths());
+    }
+
+    public function test_hs256_is_rejected_even_when_the_discovery_document_advertises_it(): void
+    {
+        // A compromised or misconfigured OP advertising HS256 must not turn
+        // the (public) JWKS material into an acceptable MAC secret.
+        $forged = JWT::encode($this->idTokenClaims(), static::rsaKey()['public'], 'HS256');
+
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument([
+                'id_token_signing_alg_values_supported' => ['RS256', 'HS256'],
+            ])),
+            $this->tokenEndpointResponse($forged),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('HMAC algorithms cannot be verified against a JWKS');
+
+        $provider->user();
+    }
 }

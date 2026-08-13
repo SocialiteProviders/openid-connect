@@ -85,4 +85,22 @@ class TimeClaimsTest extends TestCase
 
         $this->assertSame('user-123', $provider->user()->getId());
     }
+
+    public function test_a_non_numeric_exp_is_rejected(): void
+    {
+        // PHP 8 compares int >= non-numeric-string as strings, so a bogus
+        // exp would sail through a bare comparison. The unverified path is
+        // the one that leans on our own check rather than php-jwt's.
+        $claims = $this->idTokenClaims(['exp' => 'soon']);
+
+        $provider = $this->makeProvider(['verify_jwt' => false], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($this->unsignedToken($claims)),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('exp');
+
+        $provider->user();
+    }
 }

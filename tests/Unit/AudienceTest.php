@@ -69,4 +69,19 @@ class AudienceTest extends TestCase
 
         $this->assertSame('user-123', $provider->user()->getId());
     }
+
+    public function test_a_single_element_audience_array_with_a_foreign_azp_is_rejected(): void
+    {
+        $claims = $this->idTokenClaims([
+            'aud' => [static::$opClientId],
+            'azp' => 'another-client',
+        ]);
+
+        $provider = $this->makeProvider([], $this->happyPathResponses($claims));
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('azp');
+
+        $provider->user();
+    }
 }

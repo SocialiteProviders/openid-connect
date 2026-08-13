@@ -107,4 +107,33 @@ class LogoutTest extends TestCase
             Request::create('https://app.test/goodbye', 'GET', ['state' => 'anything'])
         ));
     }
+
+    public function test_an_empty_state_on_both_sides_does_not_validate(): void
+    {
+        $provider = $this->makeProvider([], [], $this->redirectRequest());
+
+        $return = Request::create('https://app.test/goodbye', 'GET', ['state' => '']);
+        $return->setLaravelSession($this->sessionStore());
+        $return->session()->put('logout_state', '');
+
+        $this->assertFalse($provider->validateLogoutState($return));
+    }
+
+    public function test_logout_appends_to_an_end_session_endpoint_that_already_carries_a_query(): void
+    {
+        $provider = $this->makeProvider(
+            [],
+            [$this->jsonResponse($this->discoveryDocument([
+                'end_session_endpoint' => static::$opBaseUrl.'/logout?tenant=legacy',
+            ]))],
+            $this->redirectRequest(),
+        );
+
+        $url = $provider->logout('the-id-token')->getTargetUrl();
+
+        $this->assertSame(1, substr_count($url, '?'));
+        $query = $this->queryOf($url);
+        $this->assertSame('legacy', $query['tenant']);
+        $this->assertSame('the-id-token', $query['id_token_hint']);
+    }
 }

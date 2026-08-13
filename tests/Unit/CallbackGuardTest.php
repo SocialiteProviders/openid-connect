@@ -2,6 +2,7 @@
 
 namespace SocialiteProviders\OpenIDConnect\Tests\Unit;
 
+use GuzzleHttp\Psr7\Response;
 use InvalidArgumentException;
 use SocialiteProviders\OpenIDConnect\Tests\Support\InteractsWithOidc;
 use SocialiteProviders\OpenIDConnect\Tests\TestCase;
@@ -87,6 +88,18 @@ class CallbackGuardTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('sub');
+
+        $provider->user();
+    }
+
+    public function test_a_non_json_token_response_is_rejected(): void
+    {
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            new Response(200, ['Content-Type' => 'text/html'], '<html>gateway error</html>'),
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
 
         $provider->user();
     }
