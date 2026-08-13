@@ -107,6 +107,12 @@ A strict comparison can never match that. `EntraProvider` defaults `issuer_valid
 
 ### Entra and email
 
-Entra's `email` claim is the directory contact email, often empty and settable to any address by any tenant admin with no domain verification. Treating it as an account identifier in a multi-tenant app is the [nOAuth account takeover](https://www.descope.com/blog/post/noauth). The login identity lives in `preferred_username` instead, so `EntraProvider` resolves the user's email from `preferred_username` first, falling back to `email`, and skips values that aren't email-shaped (`preferred_username` can be a phone number). Override with the `email_claims` config key if you want different behaviour.
+Entra's `email` claim is the directory contact email, often empty and settable to any address by any tenant admin with no domain verification. Treating it as an account identifier in a multi-tenant app is the [nOAuth account takeover](https://www.descope.com/blog/post/noauth). The login identity lives in `preferred_username` instead: for work and school accounts it's the UPN, whose domain the issuing tenant has to have verified.
+
+So `EntraProvider` resolves the user's email from `preferred_username` only, skipping values that aren't email-shaped (`preferred_username` can be a phone number). It deliberately does not fall back to `email`. A fallback would surface the spoofable value in exactly the case that matters: a hostile tenant minting a token with a phone-shaped `preferred_username` and any `email` it likes. If the fallback is fine for you (a single-tenant app trusting its own directory, say), opt in per connection:
+
+```php
+'email_claims' => ['preferred_username', 'email'],
+```
 
 Whatever claim it comes from, treat the email as display data. Key accounts on `$user->getId()` (the `sub` claim), which is immutable and can't be spoofed across tenants. If you must link accounts by email, request Microsoft's `xms_edov` optional claim and only trust the email when it says the domain owner is verified. Querying Microsoft Graph doesn't help: it returns the same directory attributes, controlled by the same tenant admin.

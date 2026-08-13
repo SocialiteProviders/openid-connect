@@ -115,14 +115,14 @@ class EmailClaimsTest extends TestCase
         $provider->user();
     }
 
-    private function entraResolveEmail(array $claims): ?string
+    private function entraResolveEmail(array $claims, array $config = []): ?string
     {
-        $provider = $this->makeProvider([], [], providerClass: EntraProvider::class);
+        $provider = $this->makeProvider($config, [], providerClass: EntraProvider::class);
 
         return (new ReflectionMethod($provider, 'resolveEmail'))->invoke($provider, $claims);
     }
 
-    public function test_entra_prefers_preferred_username_over_the_contact_email(): void
+    public function test_entra_uses_preferred_username_and_ignores_the_contact_email(): void
     {
         $this->assertSame('login@contoso.com', $this->entraResolveEmail([
             'preferred_username' => 'login@contoso.com',
@@ -130,23 +130,43 @@ class EmailClaimsTest extends TestCase
         ]));
     }
 
-    public function test_entra_falls_back_to_the_email_claim(): void
+    public function test_entra_does_not_fall_back_to_the_spoofable_email_claim(): void
     {
-        $this->assertSame('contact@contoso.com', $this->entraResolveEmail([
+        // A phone-shaped preferred_username with a free-text email claim is
+        // the token an attacker-controlled tenant would mint; email must not
+        // be consulted unless the app opts in.
+        $this->assertNull($this->entraResolveEmail([
+            'preferred_username' => '+61400000000',
+            'email'              => 'ceo@victim.com',
+        ]));
+
+        $this->assertNull($this->entraResolveEmail([
             'email' => 'contact@contoso.com',
         ]));
     }
 
-    public function test_entra_skips_a_phone_shaped_preferred_username(): void
+    public function test_an_entra_login_without_an_acceptable_preferred_username_gets_a_null_email(): void
     {
-        // preferred_username has no fixed format and can be a phone number.
-        $this->assertSame('contact@contoso.com', $this->entraResolveEmail([
+        $claims = $this->idTokenClaims([
             'preferred_username' => '+61400000000',
-            'email'              => 'contact@contoso.com',
-        ]));
+            'email'              => 'ceo@victim.com',
+        ]);
 
-        $this->assertNull($this->entraResolveEmail([
-            'preferred_username' => '+61400000000',
-        ]));
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument()),
+            $this->tokenEndpointResponse($this->encodeToken($claims)),
+            $this->jsonResponse($this->jwksDocument()),
+            $this->jsonResponse(['sub' => 'user-123', 'email' => 'ceo@victim.com']),
+        ], providerClass: EntraProvider::class);
+
+        $this->assertNull($provider->user()->getEmail());
+    }
+
+    public function test_entra_email_fallback_is_opt_in(): void
+    {
+        $this->assertSame('contact@contoso.com', $this->entraResolveEmail(
+            ['email' => 'contact@contoso.com'],
+            ['email_claims' => ['preferred_username', 'email']],
+        ));
     }
 }

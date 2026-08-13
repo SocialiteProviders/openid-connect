@@ -21,10 +21,10 @@ class EntraProvider extends Provider
         return [
             'base_url'         => 'https://login.microsoftonline.com/'.($config['tenant'] ?? 'common').'/v2.0',
             'issuer_validator' => EntraIssuerValidator::class,
-            // Entra's `email` claim is the contact-info email, often empty or
-            // unrelated to the account; `preferred_username` is the login
-            // identity.
-            'email_claims'     => ['preferred_username', 'email'],
+            // Deliberately no fallback to `email`: it is a free-text directory
+            // attribute any tenant admin can spoof (nOAuth), whereas a
+            // preferred_username UPN carries a tenant-verified domain.
+            'email_claims'     => ['preferred_username'],
         ];
     }
 

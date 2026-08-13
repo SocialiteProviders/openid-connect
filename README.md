@@ -118,7 +118,7 @@ Required: `client_id`, `client_secret`, `redirect`, and `base_url` (unless a bui
 | `base_url` | none | Issuer URL; discovery is `{base_url}/.well-known/openid-configuration`. https required (loopback hosts exempt, so local dev works). |
 | `provider` | `Provider::class` | Built-in shorthand or a Provider subclass name. |
 | `scopes` | `openid email profile` | Replaces the defaults. Array, or string separated by whitespace/commas. `openid` is always sent. |
-| `email_claims` | `['email']` | Claims consulted for the user's email, first non-empty wins. The `entra` provider defaults this to `['preferred_username', 'email']` ([why](docs/extending.md#entra-and-email)). |
+| `email_claims` | `['email']` | Claims consulted for the user's email, first non-empty wins. The `entra` provider defaults this to `['preferred_username']` ([why](docs/extending.md#entra-and-email)). |
 | `verify_jwt` | `true` | Verify id_token signatures. Only disable for an OP that can't serve a JWKS; back-channel logout tokens are always verified regardless. |
 | `jwt_public_key` | none | PEM public key used instead of fetching the JWKS. |
 | `jwt_algorithm` | advertised algs, else `RS256` | Pin the accepted signing algorithm(s), e.g. `RS256` or `RS256,ES256`. |

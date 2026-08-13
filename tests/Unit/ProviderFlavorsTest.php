@@ -89,10 +89,10 @@ class ProviderFlavorsTest extends TestCase
     {
         $provider = $this->flavor(EntraProvider::class, []);
 
-        $this->assertSame(['preferred_username', 'email'], $this->configOf($provider, 'email_claims'));
+        $this->assertSame(['preferred_username'], $this->configOf($provider, 'email_claims'));
 
-        $pinned = $this->flavor(EntraProvider::class, ['email_claims' => ['email']]);
-        $this->assertSame(['email'], $this->configOf($pinned, 'email_claims'));
+        $pinned = $this->flavor(EntraProvider::class, ['email_claims' => ['preferred_username', 'email']]);
+        $this->assertSame(['preferred_username', 'email'], $this->configOf($pinned, 'email_claims'));
     }
 
     public function test_keycloak_derives_the_base_url_from_server_and_realm(): void
