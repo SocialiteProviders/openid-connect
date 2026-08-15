@@ -75,6 +75,30 @@ class DiscoveryTest extends TestCase
         $this->assertTrue(Cache::has($key));
     }
 
+    public function test_a_cache_ttl_of_zero_disables_caching(): void
+    {
+        $provider = $this->makeProvider(['cache_ttl' => 0], [
+            $this->jsonResponse($this->discoveryDocument()),
+        ]);
+        $this->openIdConfigOf($provider);
+
+        $key = 'openidconnect_discovery_'.md5(static::$opBaseUrl.'/.well-known/openid-configuration');
+
+        $this->assertFalse(Cache::has($key));
+    }
+
+    public function test_an_empty_cache_ttl_falls_back_to_the_default(): void
+    {
+        $provider = $this->makeProvider(['cache_ttl' => ''], [
+            $this->jsonResponse($this->discoveryDocument()),
+        ]);
+        $this->openIdConfigOf($provider);
+
+        $key = 'openidconnect_discovery_'.md5(static::$opBaseUrl.'/.well-known/openid-configuration');
+
+        $this->assertTrue(Cache::has($key));
+    }
+
     public function test_malformed_discovery_json_is_rejected(): void
     {
         $provider = $this->makeProvider([], [

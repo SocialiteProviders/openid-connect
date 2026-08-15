@@ -3,6 +3,7 @@
 namespace SocialiteProviders\OpenIDConnect\Tests\Unit;
 
 use InvalidArgumentException;
+use SocialiteProviders\OpenIDConnect\Provider;
 use SocialiteProviders\OpenIDConnect\Tests\Support\InteractsWithOidc;
 use SocialiteProviders\OpenIDConnect\Tests\TestCase;
 
@@ -42,7 +43,7 @@ class NonceTest extends TestCase
         $provider = $this->makeProvider([], $this->happyPathResponses(), $request);
         $provider->user();
 
-        $this->assertNull($request->session()->get('nonce'));
+        $this->assertNull($request->session()->get(Provider::NONCE_SESSION_KEY));
     }
 
     public function test_a_replayed_id_token_fails_once_the_nonce_is_consumed(): void

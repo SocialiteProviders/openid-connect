@@ -178,7 +178,7 @@ trait InteractsWithOidc
         if ($withSession) {
             $store = $this->sessionStore();
 
-            foreach ($session ?? ['state' => static::$opState, 'nonce' => static::$opNonce] as $key => $value) {
+            foreach ($session ?? ['state' => static::$opState, Provider::NONCE_SESSION_KEY => static::$opNonce] as $key => $value) {
                 $store->put($key, $value);
             }
 

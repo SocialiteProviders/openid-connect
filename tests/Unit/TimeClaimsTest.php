@@ -2,6 +2,7 @@
 
 namespace SocialiteProviders\OpenIDConnect\Tests\Unit;
 
+use Firebase\JWT\JWT;
 use InvalidArgumentException;
 use SocialiteProviders\OpenIDConnect\Tests\Support\InteractsWithOidc;
 use SocialiteProviders\OpenIDConnect\Tests\TestCase;
@@ -47,6 +48,45 @@ class TimeClaimsTest extends TestCase
         $provider = $this->makeProvider(['clock_skew' => 120], $this->happyPathResponses($claims));
 
         $this->assertSame('user-123', $provider->user()->getId());
+    }
+
+    public function test_the_global_jwt_leeway_is_restored_after_verification(): void
+    {
+        // JWT::$leeway is a process-wide static, so a long-running worker
+        // would otherwise inherit this provider's tolerance.
+        $previous = JWT::$leeway;
+        JWT::$leeway = 45;
+
+        try {
+            $provider = $this->makeProvider(['clock_skew' => 120], $this->happyPathResponses());
+            $provider->user();
+
+            $this->assertSame(45, JWT::$leeway);
+        } finally {
+            JWT::$leeway = $previous;
+        }
+    }
+
+    public function test_the_global_jwt_leeway_is_restored_after_a_failed_verification(): void
+    {
+        $previous = JWT::$leeway;
+        JWT::$leeway = 45;
+
+        try {
+            $claims = $this->idTokenClaims(['exp' => time() - 6000]);
+            $provider = $this->makeProvider([], $this->happyPathResponses($claims));
+
+            try {
+                $provider->user();
+                $this->fail('Expected the expired token to be rejected.');
+            } catch (InvalidArgumentException) {
+                // The restoration, not the rejection, is what is under test.
+            }
+
+            $this->assertSame(45, JWT::$leeway);
+        } finally {
+            JWT::$leeway = $previous;
+        }
     }
 
     public function test_a_not_yet_valid_nbf_is_rejected(): void

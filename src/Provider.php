@@ -31,6 +31,8 @@ class Provider extends AbstractProvider
 
     protected const BACKCHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
 
+    public const NONCE_SESSION_KEY = 'openidconnect_nonce';
+
     public $configurations = null;
 
     protected $scopes = self::DEFAULT_SCOPES;
@@ -127,7 +129,7 @@ class Provider extends AbstractProvider
         }
 
         if ($this->usesNonce()) {
-            $this->request->session()->put('nonce', $this->getNonce());
+            $this->request->session()->put(self::NONCE_SESSION_KEY, $this->getNonce());
         }
 
         if ($this->usesPKCE()) {
@@ -218,7 +220,11 @@ class Provider extends AbstractProvider
             return $url;
         }
 
-        return $url.(str_contains($url, '?') ? '&' : '?').$query;
+        [$base, $fragment] = array_pad(explode('#', $url, 2), 2, null);
+
+        $withQuery = $base.(str_contains($base, '?') ? '&' : '?').$query;
+
+        return $fragment === null ? $withQuery : $withQuery.'#'.$fragment;
     }
 
     protected function getCodeFields($state = null): array
@@ -284,7 +290,9 @@ class Provider extends AbstractProvider
 
     protected function getCacheTtl(): int
     {
-        return (int) ($this->getConfig('cache_ttl') ?: 3600);
+        $ttl = $this->rawConfig('cache_ttl');
+
+        return ($ttl === null || $ttl === '') ? 3600 : (int) $ttl;
     }
 
     protected function getHttpClient()
@@ -308,7 +316,7 @@ class Provider extends AbstractProvider
     protected function getCurrentNonce(): ?string
     {
         return $this->request->hasSession()
-            ? $this->request->session()->get('nonce')
+            ? $this->request->session()->get(self::NONCE_SESSION_KEY)
             : null;
     }
 
@@ -488,7 +496,7 @@ class Provider extends AbstractProvider
         $this->validateIdTokenClaims($payload, $alg, $accessToken);
 
         if ($this->usesNonce() && $this->request->hasSession()) {
-            $this->request->session()->forget('nonce');
+            $this->request->session()->forget(self::NONCE_SESSION_KEY);
         }
 
         return $payload;
@@ -510,6 +518,8 @@ class Provider extends AbstractProvider
                 401
             );
         }
+
+        $previousLeeway = JWT::$leeway;
 
         try {
             JWT::$leeway = (int) ($this->getConfig('clock_skew') ?? 0);
@@ -542,6 +552,8 @@ class Provider extends AbstractProvider
             return json_decode(json_encode($decoded));
         } catch (Exception $e) {
             throw new InvalidArgumentException('JWT: Verification failed - '.$e->getMessage(), 401);
+        } finally {
+            JWT::$leeway = $previousLeeway;
         }
     }
 
@@ -1126,7 +1138,7 @@ class Provider extends AbstractProvider
     {
         $configured = $this->rawConfig('logout_token_replay_ttl');
 
-        if ($configured !== null) {
+        if ($configured !== null && $configured !== '') {
             return (int) $configured;
         }
 

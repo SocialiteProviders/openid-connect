@@ -3,6 +3,7 @@
 namespace SocialiteProviders\OpenIDConnect\Tests\Unit;
 
 use InvalidArgumentException;
+use SocialiteProviders\OpenIDConnect\Provider;
 use SocialiteProviders\OpenIDConnect\Tests\Support\InteractsWithOidc;
 use SocialiteProviders\OpenIDConnect\Tests\TestCase;
 
@@ -27,7 +28,7 @@ class RedirectFlowTest extends TestCase
 
         // State, nonce and the PKCE verifier survive in the session for the callback.
         $this->assertSame($request->session()->get('state'), $query['state']);
-        $this->assertSame($request->session()->get('nonce'), $query['nonce']);
+        $this->assertSame($request->session()->get(Provider::NONCE_SESSION_KEY), $query['nonce']);
         $this->assertNotEmpty($request->session()->get('code_verifier'));
 
         // PKCE is on by default.
@@ -44,6 +45,21 @@ class RedirectFlowTest extends TestCase
         $query = $this->queryOf($provider->redirect()->getTargetUrl());
 
         $this->assertSame('openid email profile', $query['scope']);
+    }
+
+    public function test_a_fragment_on_the_authorization_endpoint_stays_behind_the_query(): void
+    {
+        $provider = $this->makeProvider([], [
+            $this->jsonResponse($this->discoveryDocument([
+                'authorization_endpoint' => static::$opBaseUrl.'/authorize#done',
+            ])),
+        ], $this->redirectRequest());
+
+        $url = $provider->redirect()->getTargetUrl();
+
+        $this->assertStringStartsWith(static::$opBaseUrl.'/authorize?', $url);
+        $this->assertStringEndsWith('#done', $url);
+        $this->assertSame('code', $this->queryOf($url)['response_type']);
     }
 
     public function test_without_pkce_omits_the_challenge(): void
@@ -70,7 +86,7 @@ class RedirectFlowTest extends TestCase
         $query = $this->queryOf($provider->withoutNonce()->redirect()->getTargetUrl());
 
         $this->assertArrayNotHasKey('nonce', $query);
-        $this->assertNull($request->session()->get('nonce'));
+        $this->assertNull($request->session()->get(Provider::NONCE_SESSION_KEY));
     }
 
     public function test_use_nonce_config_false_omits_the_nonce(): void
